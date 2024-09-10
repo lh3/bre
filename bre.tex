@@ -1,0 +1,73 @@
+\documentclass[10pt]{article}
+\usepackage{color}
+\definecolor{gray}{rgb}{0.7,0.7,0.7}
+\usepackage{framed}
+\usepackage{enumitem}
+\usepackage{longtable}
+
+\addtolength{\textwidth}{3.0cm}
+\addtolength{\hoffset}{-1.5cm}
+\addtolength{\textheight}{3.4cm}
+\addtolength{\voffset}{-1.7cm}
+
+\renewcommand{\arraystretch}{1.2}
+\renewcommand{\ttdefault}{cmtt}
+
+\title{BRE: a Binary Run-length Encoding format}
+\author{}
+\date{\vspace{-8ex}}
+
+\begin{document}
+\maketitle
+
+{\small
+BWT construction at the terabyte scale is resource demanding.
+Due to the lack of an exchange format, most BWT-based tools construct BWT from scratch and cannot use prebuilt BWTs.
+Even when they use the same BWT construction algorithm, they may encode each symbol in the alphabet differently.
+BWT-based tools rarely talk to each other unless they share code.
+
+BRE is a binary format to store strings in the run-length encoding.
+It introduces an interface between BWT-based tools such that a BWT constructed with one tool can be relatively easily used by other tools.
+BRE aims to be simple such that it can be read and write easily.
+It may not be space efficient and does not support advanced operations such as rank/select.
+
+The following table describes the binary BRE format.
+All integers are represented in little endian.
+}
+\begin{table}[ht]
+\centering
+{\small
+\begin{tabular}{|l|l|p{7.0cm}|l|l|}
+  \cline{1-5}
+  \multicolumn{2}{|c|}{\bf Field} & \multicolumn{1}{c|}{\bf Description} & \multicolumn{1}{c|}{\bf Type} & \multicolumn{1}{c|}{\bf Value} \\\cline{1-5}
+  \multicolumn{2}{|l|}{\sf magic} & BRE magic string & {\tt char[4]} & {\tt BRE\char92 1}\\\cline{1-5}
+  \multicolumn{2}{|l|}{\sf b\_per\_sym} & Number of bytes per symbol & {\tt uint8\_t} & $[1,8]$ \\\cline{1-5}
+  \multicolumn{2}{|l|}{\sf b\_per\_run} & Number of bytes per run & {\tt uint8\_t} & $[1,8]$ \\\cline{1-5}
+  \multicolumn{2}{|l|}{\sf atype} & Predefined alphabet type. 0 for undefined. & {\tt uint16\_t} & $[0,2^{16})$ \\\cline{1-5}
+  \multicolumn{2}{|l|}{\sf asize} & Size of the alphabet & {\tt int64\_t} & $[2,2^{63})$ \\\cline{1-5}
+  \multicolumn{2}{|l|}{\sf n\_rec} & Number of records. $-$1 for missing data. & {\tt int64\_t} & $[-1,2^{63})$ \\\cline{1-5}
+  \multicolumn{5}{|c|}{\textcolor{gray}{\it List of records ($n=n\_rec$ or until the end of file)}} \\\cline{2-5}
+  & {\sf sym} & Symbol & {\tt uint8\_t[b\_per\_sym]} & $[0,{\sf asize})$ \\\cline{2-5}
+  & {\sf run\_len} & Run length. A long run may be split. & {\tt uint8\_t[b\_per\_run]} & $[1,2^{8\cdot{\sf b\_per\_run}})$ \\\cline{2-5}
+  \cline{1-5}
+\end{tabular}}
+\end{table}
+
+{\small
+Predefined alphabet ``{\sf atype}'' may take following values:
+\begin{enumerate}
+\item {\sf DNA6} (${\sf asize}=6$). {\tt \$}/{\tt A}/{\tt C}/{\tt G}/{\tt T}/{\tt N} is mapped to integer 0--5, respectively.
+\item {\sf DNA16} (${\sf asize}=16$). {\tt \$ACMGRSVTWYHKDBN} is mapped to 0--15, respectively.
+\end{enumerate}
+
+Potential caveats and alternatives:
+\begin{itemize}
+\item Many tools require suffix array samples for the ``locate'' operation.
+  We need to provide a tool to compute suffix array samples from BWT.
+\item It is more space efficient to bit-pack {\sf sym} and {\sf run\_len} but this will complicate reading and writing.
+\item It is tempted to store the number of symbols and number of runs but a BRE writter may not have this information at the beginning.
+  For a similar reason, {\sf n\_rec} is always easy to obtain.
+\end{itemize}
+}
+
+\end{document}
