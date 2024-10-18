@@ -66,7 +66,7 @@ Potential caveats and alternatives:
   We need to provide a tool to compute suffix array samples from BWT.
 \item It is more space efficient to bit-pack {\sf sym} and {\sf run\_len} but this will complicate reading and writing.
 \item It is tempted to store the number of symbols and number of runs but a BRE writter may not have this information at the beginning.
-  For a similar reason, {\sf n\_rec} is always easy to obtain.
+  For a similar reason, {\sf n\_rec} is not always easy to obtain and thus is allowed to be missing.
 \end{itemize}
 }
 
