@@ -23,8 +23,8 @@
 {\small
 BWT construction at the terabyte scale is resource demanding.
 Due to the lack of an exchange format, most BWT-based tools construct BWT from scratch and cannot use prebuilt BWTs.
-Even when they use the same BWT construction algorithm, they may encode each symbol in the alphabet differently.
-BWT-based tools rarely talk to each other unless they share code.
+Even when they use the same BWT construction algorithm, they may map symbols to intergers differently.
+This makes it difficult for BWT-based tools work together.
 
 BRE is a binary format to store strings in the run-length encoding.
 It introduces an interface between BWT-based tools such that a BWT constructed with one tool can be relatively easily used by other tools.
@@ -44,8 +44,10 @@ All integers are represented in little endian.
   \multicolumn{2}{|l|}{\sf b\_per\_sym} & Number of bytes per symbol & {\tt uint8\_t} & $[1,8]$ \\\cline{1-5}
   \multicolumn{2}{|l|}{\sf b\_per\_run} & Number of bytes per run & {\tt uint8\_t} & $[1,8]$ \\\cline{1-5}
   \multicolumn{2}{|l|}{\sf atype} & Predefined alphabet type. 0 for undefined. & {\tt uint16\_t} & $[0,2^{16})$ \\\cline{1-5}
-  \multicolumn{2}{|l|}{\sf asize} & Size of the alphabet & {\tt int64\_t} & $[2,2^{63})$ \\\cline{1-5}
+  \multicolumn{2}{|l|}{\sf asize} & Size of the alphabet \emph{including} the sentinel & {\tt int64\_t} & $[2,2^{63})$ \\\cline{1-5}
   \multicolumn{2}{|l|}{\sf n\_rec} & Number of records. $-$1 for missing data. & {\tt int64\_t} & $[-1,2^{63})$ \\\cline{1-5}
+  \multicolumn{2}{|l|}{\sf l\_aux} & Length of auxiliary data in bytes & {\tt int64\_t} & $[0,2^{63})$ \\\cline{1-5}
+  \multicolumn{2}{|l|}{\sf aux} & Auxiliary data & {\tt uint8\_t[l\_aux]} & \\\cline{1-5}
   \multicolumn{5}{|c|}{\textcolor{gray}{\it List of records ($n=n\_rec$ or until the end of file)}} \\\cline{2-5}
   & {\sf sym} & Symbol & {\tt uint8\_t[b\_per\_sym]} & $[0,{\sf asize})$ \\\cline{2-5}
   & {\sf run\_len} & Run length. A long run may be split. & {\tt uint8\_t[b\_per\_run]} & $[1,2^{8\cdot{\sf b\_per\_run}})$ \\\cline{2-5}
