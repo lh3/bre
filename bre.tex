@@ -5,10 +5,7 @@
 \usepackage{enumitem}
 \usepackage{longtable}
 
-\addtolength{\textwidth}{3.0cm}
-\addtolength{\hoffset}{-1.5cm}
-\addtolength{\textheight}{3.4cm}
-\addtolength{\voffset}{-1.7cm}
+\usepackage[margin=1.0in,footskip=0.25in]{geometry}
 
 \renewcommand{\arraystretch}{1.2}
 \renewcommand{\ttdefault}{cmtt}
@@ -37,14 +34,15 @@ All integers are represented in little endian.
 \begin{table}[ht]
 \centering
 {\small
-\begin{tabular}{|l|l|p{7.0cm}|l|l|}
+\begin{tabular}{|l|l|p{6.7cm}|l|l|}
   \cline{1-5}
   \multicolumn{2}{|c|}{\bf Field} & \multicolumn{1}{c|}{\bf Description} & \multicolumn{1}{c|}{\bf Type} & \multicolumn{1}{c|}{\bf Value} \\\cline{1-5}
   \multicolumn{2}{|l|}{\sf magic} & BRE magic string & {\tt char[4]} & {\tt BRE\char92 1}\\\cline{1-5}
   \multicolumn{2}{|l|}{\sf b\_per\_sym} & Number of bytes per symbol & {\tt uint8\_t} & $[1,8]$ \\\cline{1-5}
-  \multicolumn{2}{|l|}{\sf b\_per\_run} & Number of bytes per run & {\tt uint8\_t} & $[1,8]$ \\\cline{1-5}
+  \multicolumn{2}{|l|}{\sf b\_per\_run} & Number of bytes per run & {\tt uint8\_t} & $[0,8]$ \\\cline{1-5}
   \multicolumn{2}{|l|}{\sf atype} & Predefined alphabet type. 0 for undefined. & {\tt uint16\_t} & $[0,2^{16})$ \\\cline{1-5}
   \multicolumn{2}{|l|}{\sf asize} & Size of the alphabet \emph{including} the sentinel & {\tt int64\_t} & $[2,2^{63})$ \\\cline{1-5}
+  \multicolumn{2}{|l|}{\sf mtype} & Type of multi-string BWT & {\tt uint16\_t} & $[0,2^{16})$ \\\cline{1-5}
   \multicolumn{2}{|l|}{\sf n\_rec} & Number of records. $-$1 for missing data. & {\tt int64\_t} & $[-1,2^{63})$ \\\cline{1-5}
   \multicolumn{2}{|l|}{\sf l\_aux} & Length of auxiliary data in bytes & {\tt int64\_t} & $[0,2^{63})$ \\\cline{1-5}
   \multicolumn{2}{|l|}{\sf aux} & Auxiliary data & {\tt uint8\_t[l\_aux]} & \\\cline{1-5}
@@ -56,6 +54,7 @@ All integers are represented in little endian.
 \end{table}
 
 {\small
+Sentinels shall be mapped to integer 0.
 Predefined alphabet ``{\sf atype}'' may take following values:
 \begin{enumerate}
 \item {\sf ASCII} (${\sf asize}=128$)
@@ -63,12 +62,25 @@ Predefined alphabet ``{\sf atype}'' may take following values:
 \item {\sf DNA16} (${\sf asize}=16$). {\tt \$ACMGRSVTWYHKDBN} is mapped to 0--15, respectively.
 \end{enumerate}
 
+The type of multi-string BWT ``{\sf mtype}'' can be:
+\begin{enumerate}
+\setcounter{enumi}{-1}
+\item Undefined
+\item Single string. This includes multi-string concatenation without sentinels, or concatenation with a special symbol.
+  There should be exactly one sentinel.
+\item Multi-string BWT, simple concatenation. Sentinels are not distinguished from each other.
+\item Multi-string BWT, input order. Sentinels ordered by input.
+\item Multi-string BWT, other order.
+\end{enumerate}
+
 Potential caveats and alternatives:
 \begin{itemize}
 \item Many tools require suffix array samples for the ``locate'' operation.
   We need to provide a tool to compute suffix array samples from BWT.
 \item It is more space efficient to bit-pack {\sf sym} and {\sf run\_len} but this will complicate reading and writing.
-\item It is tempted to store the number of symbols and number of runs but a BRE writter may not have this information at the beginning.
+\item A BRE reader would prefer to see the number of symbols and number of runs in the header.
+  However, a BRE writer may not have this information at the beginning.
+  This may happen, for example, when we read a BWT in plain text from the standard input and convert it to BRE.
   For a similar reason, {\sf n\_rec} is not always easy to obtain and thus is allowed to be missing.
 \end{itemize}
 }
