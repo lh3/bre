@@ -18,16 +18,8 @@ typedef struct {
 	uint8_t *aux;      // auxiliary data
 } bre_hdr_t;
 
-typedef struct {
-	// these members are not modified by bre_read/bre_write()
-	bre_hdr_t hdr;     // BRE header
-	int32_t is_write;  // if the file is opened for write
-	// modified by bre_read/bre_write()
-	void *fp;          // actual file handler (currently a FILE pointer)
-	int64_t c;         // buffered symbol
-	int64_t l;         // buffered run length
-	int64_t n_rec;     // number of records read or written so far
-} bre_file_t;
+struct bre_file_s;
+typedef struct bre_file_s bre_file_t;
 
 typedef enum { BRE_AT_UNKNOWN=0, BRE_AT_ASCII, BRE_AT_DNA6, BRE_AT_DNA16 } bre_atype_t;
 
@@ -84,8 +76,8 @@ bre_file_t *bre_open_write(const char *fn, const bre_hdr_t *hdr);
  * multiple function calls. It is also ok to write a long run. This function
  * automatically handles both cases.
  *
- * Remember to call bre_close(); otherwise some runs will not be written to the
- * output file.
+ * Remember to call bre_close() at the end; otherwise some runs will not be
+ * written to the output file.
  *
  * @param f    file handler
  * @param c    symbol

@@ -9,6 +9,17 @@
 
 #define BRE_HDR_SIZE 34
 
+struct bre_file_s {
+	// these members are not modified by bre_read/bre_write()
+	bre_hdr_t hdr;     // BRE header
+	int32_t is_write;  // if the file is opened for write
+	// modified by bre_read/bre_write()
+	FILE *fp;          // actual file handler
+	int64_t c;         // buffered symbol
+	int64_t l;         // buffered run length
+	int64_t n_rec;     // number of records read or written so far
+};
+
 /**********
  * Writer *
  **********/
@@ -43,7 +54,6 @@ static inline void bre_write_uint(FILE *fp, uint8_t n, uint64_t x)
 
 int bre_write(bre_file_t *f, int64_t c, int64_t l)
 {
-	FILE *fp = (FILE*)f->fp;
 	if (f == 0 || !f->is_write) return -1;
 	if (f->c == c) {
 		f->l += l;
@@ -51,8 +61,8 @@ int bre_write(bre_file_t *f, int64_t c, int64_t l)
 		int64_t rest = f->l, max = (1LL<<f->hdr.b_per_run*8) - 1;
 		while (rest > 0) {
 			int64_t len = rest <= max? rest : max;
-			bre_write_uint(fp, f->hdr.b_per_sym, f->c);
-			bre_write_uint(fp, f->hdr.b_per_run, len);
+			bre_write_uint(f->fp, f->hdr.b_per_sym, f->c);
+			bre_write_uint(f->fp, f->hdr.b_per_run, len);
 			f->n_rec++;
 			rest -= len;
 		}
@@ -119,15 +129,14 @@ static inline int64_t bre_read_uint(FILE *fp, uint8_t n) // NB: read up to 63 bi
 
 int64_t bre_read(bre_file_t *f, int64_t *b)
 {
-	FILE *fp = (FILE*)f->fp;
 	int64_t ret = -1;
 	if (f == 0 && f->is_write) return -1;
 	while (1) {
-		if (!feof(fp) && (f->hdr.n_rec < 0 || f->n_rec < f->hdr.n_rec)) {
+		if (!feof(f->fp) && (f->hdr.n_rec < 0 || f->n_rec < f->hdr.n_rec)) {
 			int64_t c, l;
-			c = bre_read_uint(fp, f->hdr.b_per_sym);
+			c = bre_read_uint(f->fp, f->hdr.b_per_sym);
 			if (c < 0) goto end_read;
-			l = bre_read_uint(fp, f->hdr.b_per_run);
+			l = bre_read_uint(f->fp, f->hdr.b_per_run);
 			f->n_rec++;
 			if (f->c < 0) {
 				f->c = c, f->l = l;
@@ -172,7 +181,7 @@ void bre_close(bre_file_t *f)
 	if (f == 0) return;
 	if (f->is_write) bre_write(f, -1, 0);
 	if (f->hdr.l_aux > 0) free(f->hdr.aux);
-	fclose((FILE*)f->fp);
+	fclose(f->fp);
 	free(f);
 }
 
