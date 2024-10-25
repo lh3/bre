@@ -24,6 +24,16 @@ struct bre_file_s {
  * Writer *
  **********/
 
+static inline int bre_write_uint(FILE *fp, uint8_t n, uint64_t x)
+{
+	uint8_t i, k, shift = 0;
+	for (i = k = 0; i < n; ++i, shift += 8) {
+		uint8_t y = (x >> shift) & 0xff;
+		k += fwrite(&y, 1, 1, fp);
+	}
+	return k;
+}
+
 static int bre_hdr_write(FILE *fp, const bre_hdr_t *hdr)
 {
 	size_t sz = 0;
@@ -32,23 +42,14 @@ static int bre_hdr_write(FILE *fp, const bre_hdr_t *hdr)
 	sz += fwrite(&hdr->b_per_run, 1, 1, fp);
 	sz += fwrite(&hdr->atype, 1, 1, fp);
 	sz += fwrite(&hdr->mtype, 1, 1, fp);
-	sz += fwrite(&hdr->asize, 8, 1, fp) * 8;
-	sz += fwrite(&hdr->l_aux, 8, 1, fp) * 8;
+	sz += bre_write_uint(fp, 8, hdr->asize); // NB: fwrite() depends on the CPU endianness and shouldn't be used here
+	sz += bre_write_uint(fp, 8, hdr->l_aux);
 	if (sz != BRE_HDR_SIZE) return -1;
 	if (hdr->l_aux > 0) {
 		assert(hdr->aux);
 		sz = fwrite(hdr->aux, 1, hdr->l_aux, fp); // TODO: test return code
 	}
 	return 0;
-}
-
-static inline void bre_write_uint(FILE *fp, uint8_t n, uint64_t x)
-{
-	uint8_t i, k, shift = 0;
-	for (i = k = 0; i < n; ++i, shift += 8) {
-		uint8_t y = (x >> shift) & 0xff;
-		k += fwrite(&y, 1, 1, fp);
-	}
 }
 
 int bre_write(bre_file_t *f, int64_t c, int64_t l)
@@ -91,28 +92,6 @@ bre_file_t *bre_open_write(const char *fn, const bre_hdr_t *hdr)
  * Reader *
  **********/
 
-static int bre_hdr_read(FILE *fp, bre_hdr_t *hdr)
-{
-	size_t sz;
-	char magic[4];
-	memset(hdr, 0, sizeof(*hdr));
-	sz = fread(magic, 1, 4, fp);
-	if (sz < 4 && strncmp(magic, "BRE\1", 4) != 0) // wrong magic
-		return -1;
-	sz += fread(&hdr->b_per_sym, 1, 1, fp);
-	sz += fread(&hdr->b_per_run, 1, 1, fp);
-	sz += fread(&hdr->atype, 1, 1, fp);
-	sz += fread(&hdr->mtype, 1, 1, fp);
-	sz += fread(&hdr->asize, 8, 1, fp) * 8;
-	sz += fread(&hdr->l_aux, 8, 1, fp) * 8;
-	if (sz != BRE_HDR_SIZE) return -2;
-	if (hdr->l_aux > 0) {
-		hdr->aux = Calloc(uint8_t, hdr->l_aux);
-		sz = fread(hdr->aux, 1, hdr->l_aux, fp); // TODO: test return code
-	}
-	return 0;
-}
-
 static inline int64_t bre_read_uint(FILE *fp, uint8_t n) // NB: read up to 63 bits
 {
 	uint8_t i, y, k, shift = 0;
@@ -125,6 +104,28 @@ static inline int64_t bre_read_uint(FILE *fp, uint8_t n) // NB: read up to 63 bi
 	return k == n? x : -1;
 }
 
+static int bre_hdr_read(FILE *fp, bre_hdr_t *hdr)
+{
+	size_t sz;
+	char magic[4];
+	memset(hdr, 0, sizeof(*hdr));
+	sz = fread(magic, 1, 4, fp);
+	if (sz < 4 && strncmp(magic, "BRE\1", 4) != 0) // wrong magic
+		return -1;
+	sz += fread(&hdr->b_per_sym, 1, 1, fp);
+	sz += fread(&hdr->b_per_run, 1, 1, fp);
+	sz += fread(&hdr->atype, 1, 1, fp);
+	sz += fread(&hdr->mtype, 1, 1, fp);
+	hdr->asize = bre_read_uint(fp, 8); sz += 8;
+	hdr->l_aux = bre_read_uint(fp, 8); sz += 8;
+	if (sz != BRE_HDR_SIZE) return -2;
+	if (hdr->l_aux > 0) {
+		hdr->aux = Calloc(uint8_t, hdr->l_aux);
+		sz = fread(hdr->aux, 1, hdr->l_aux, fp); // TODO: test return code
+	}
+	return 0;
+}
+
 int64_t bre_read(bre_file_t *f, int64_t *b)
 {
 	int64_t ret = -1;
@@ -133,7 +134,7 @@ int64_t bre_read(bre_file_t *f, int64_t *b)
 		if (!feof(f->fp)) {
 			int64_t c, l;
 			c = bre_read_uint(f->fp, f->hdr.b_per_sym);
-			if (c < 0) goto end_read;
+			if (c < 0) goto end_read; // failed to read due to EOF or error; TODO: have an error field in bre_file_t
 			l = bre_read_uint(f->fp, f->hdr.b_per_run);
 			if (c == 0 && l == 0) goto end_read;
 			f->n_rec++;
@@ -182,6 +183,7 @@ void bre_close(bre_file_t *f)
 		bre_write(f, -1, 0);
 		bre_write_uint(f->fp, f->hdr.b_per_sym, 0);
 		bre_write_uint(f->fp, f->hdr.b_per_run, 0);
+		bre_write_uint(f->fp, 8, f->n_rec);
 	}
 	if (f->hdr.l_aux > 0) free(f->hdr.aux);
 	fclose(f->fp);

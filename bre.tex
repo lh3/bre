@@ -34,16 +34,15 @@ All integers are represented in little endian.
 \begin{table}[ht]
 \centering
 {\small
-\begin{tabular}{|l|l|p{6.7cm}|l|l|}
+\begin{tabular}{|l|l|p{7cm}|l|l|}
   \cline{1-5}
   \multicolumn{2}{|c|}{\bf Field} & \multicolumn{1}{c|}{\bf Description} & \multicolumn{1}{c|}{\bf Type} & \multicolumn{1}{c|}{\bf Value} \\\cline{1-5}
   \multicolumn{2}{|l|}{\sf magic} & BRE magic string & {\tt char[4]} & {\tt BRE\char92 1}\\\cline{1-5}
   \multicolumn{2}{|l|}{\sf b\_per\_sym} & Number of bytes per symbol & {\tt uint8\_t} & $[1,8]$ \\\cline{1-5}
-  \multicolumn{2}{|l|}{\sf b\_per\_run} & Number of bytes per run & {\tt uint8\_t} & $[0,8]$ \\\cline{1-5}
+  \multicolumn{2}{|l|}{\sf b\_per\_run} & Number of bytes per run & {\tt uint8\_t} & $[1,8]$ \\\cline{1-5}
   \multicolumn{2}{|l|}{\sf atype} & Predefined alphabet type. 0 for undefined. & {\tt uint8\_t} & $[0,256)$ \\\cline{1-5}
   \multicolumn{2}{|l|}{\sf mtype} & Type of multi-string BWT & {\tt uint8\_t} & $[0,256)$ \\\cline{1-5}
   \multicolumn{2}{|l|}{\sf asize} & Size of the alphabet \emph{including} the sentinel & {\tt int64\_t} & $[2,2^{63})$ \\\cline{1-5}
-%  \multicolumn{2}{|l|}{\sf n\_rec} & Number of records. $-$1 for missing data. & {\tt int64\_t} & $[-1,2^{63})$ \\\cline{1-5}
   \multicolumn{2}{|l|}{\sf l\_aux} & Length of auxiliary data in bytes & {\tt int64\_t} & $[0,2^{63})$ \\\cline{1-5}
   \multicolumn{2}{|l|}{\sf aux} & Auxiliary data & {\tt uint8\_t[l\_aux]} & \\\cline{1-5}
   \multicolumn{5}{|c|}{\textcolor{gray}{\it List of records until (0,0) is read}} \\\cline{2-5}
@@ -51,6 +50,7 @@ All integers are represented in little endian.
   & {\sf run\_len} & Run length. A long run may be split. & {\tt uint8\_t[b\_per\_run]} & $[1,2^{8\cdot{\sf b\_per\_run}})$ \\\cline{1-5}
   \multicolumn{2}{|l|}{\sf eof\_sym} & End-of-file symbol & {\tt uint8\_t[b\_per\_sym]} & 0 \\\cline{1-5}
   \multicolumn{2}{|l|}{\sf eof\_len} & End-of-file run length & {\tt uint8\_t[b\_per\_run]} & 0 \\\cline{1-5}
+  \multicolumn{2}{|l|}{\sf n\_rec} & Number of records excluding the EOF run & {\tt int64\_t} & $[0,2^{63})$ \\\cline{1-5}
 \end{tabular}}
 \end{table}
 
@@ -82,7 +82,6 @@ Potential caveats and alternatives:
 \item A BRE reader would prefer to see the number of symbols and number of runs in the header.
   However, a BRE writer may not have this information at the beginning.
   This may happen, for example, when we read a BWT in plain text from the standard input and convert it to BRE.
-  For a similar reason, {\sf n\_rec} is not always easy to obtain and thus is allowed to be missing.
 \end{itemize}
 }
 
