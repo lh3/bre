@@ -8,34 +8,99 @@ extern "C" {
 #endif
 
 typedef struct {
-	uint8_t b_per_sym;
-	uint8_t b_per_run;
-	uint16_t atype;
-	int64_t asize;
-	uint16_t mtype;
-	int64_t n_rec;
-	int64_t l_aux;
-	uint8_t *aux;
+	uint8_t b_per_sym; // bytes per symbol
+	uint8_t b_per_run; // bytes per run
+	uint16_t atype;    // alphabet type
+	int64_t asize;     // alphabet size
+	uint16_t mtype;    // type of multi-string BWT
+	int64_t n_rec;     // number of records. A "record is a (symbol,length) pair in BRE file
+	int64_t l_aux;     // length of auxiliary data
+	uint8_t *aux;      // auxiliary data
 } bre_hdr_t;
 
 typedef struct {
-	bre_hdr_t hdr;
-	int32_t is_write;
-	// modified during reading/writing
-	void *fp;
-	int64_t c;
-	int64_t l;
-	int64_t n_rec;
+	// these members are not modified by bre_read/bre_write()
+	bre_hdr_t hdr;     // BRE header
+	int32_t is_write;  // if the file is opened for write
+	// modified by bre_read/bre_write()
+	void *fp;          // actual file handler (currently a FILE pointer)
+	int64_t c;         // buffered symbol
+	int64_t l;         // buffered run length
+	int64_t n_rec;     // number of records read or written so far
 } bre_file_t;
 
 typedef enum { BRE_AT_UNKNOWN=0, BRE_AT_ASCII, BRE_AT_DNA6, BRE_AT_DNA16 } bre_atype_t;
 
+/**
+ * Open a BRE file for reading
+ *
+ * @param fn   file name. NULL or "-" for stdin
+ *
+ * @return file handler. NULL for error
+ */
 bre_file_t *bre_open_read(const char *fn);
+
+/**
+ * Read a run
+ *
+ * In a BRE file, a run longer than (1<<b_per_run)-1 may be split into separate
+ * records. This function combines them. As a result, _c_ returned by the
+ * function is different upon each call.
+ *
+ * @param f    file handler
+ * @param c    symbol (out). -1 if nothing is read
+ *
+ * @return run length if positive. 0 if nothing is read. -1 for error
+ */
 int64_t bre_read(bre_file_t *f, int64_t *c);
-bre_file_t *bre_open_write(const char *fn, const bre_hdr_t *hdr);
-int bre_write(bre_file_t *f, int64_t c, int64_t l);
-void bre_close(bre_file_t *f);
+
+/**
+ * Fill a BRE header structure
+ *
+ * @param h          header to fill (out). bre_hdr_t::aux is discarded (be careful of memory leak!)
+ * @param at         alphabet type (atype)
+ * @param b_per_run  bytes per run
+ *
+ * @return always 0 at the moment
+ */
 int bre_hdr_init(bre_hdr_t *h, bre_atype_t at, int32_t b_per_run);
+
+/**
+ * Create a BRE file
+ *
+ * @param fn   file name
+ * @param hdr  BRE header
+ *
+ * @return file handker, NULL for error
+ */
+bre_file_t *bre_open_write(const char *fn, const bre_hdr_t *hdr);
+
+/**
+ * Write a run
+ *
+ * This function accumulates run length if _c_ is the same in consecutive
+ * function calls. It also splits a run longer than (1<<b_per_run)-1 into
+ * multiple records in the output file. It is ok to write a long run through
+ * multiple function calls. It is also ok to write a long run. This function
+ * automatically handles both cases.
+ *
+ * Remember to call bre_close(); otherwise some runs will not be written to the
+ * output file.
+ *
+ * @param f    file handler
+ * @param c    symbol
+ * @param l    run length
+ *
+ * @return 0 for success and -1 for error
+ */
+int bre_write(bre_file_t *f, int64_t c, int64_t l);
+
+/**
+ * Close a file handler
+ *
+ * @param f    file handler
+ */
+void bre_close(bre_file_t *f);
 
 #ifdef __cplusplus
 }
