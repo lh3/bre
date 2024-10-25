@@ -31,3 +31,6 @@ depend:
 		(LC_ALL=C; export LC_ALL; makedepend -Y -- $(CFLAGS) $(CPPFLAGS) -- *.c)
 
 # DO NOT DELETE
+
+bre.o: bre.h
+example.o: bre.h
