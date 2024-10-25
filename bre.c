@@ -32,7 +32,7 @@ static int bre_hdr_write(FILE *fp, const bre_hdr_t *hdr)
 	return 0;
 }
 
-static inline void bre_write_int(FILE *fp, uint8_t n, uint64_t x)
+static inline void bre_write_uint(FILE *fp, uint8_t n, uint64_t x)
 {
 	uint8_t i, k, shift = 0;
 	for (i = k = 0; i < n; ++i, shift += 8) {
@@ -44,15 +44,15 @@ static inline void bre_write_int(FILE *fp, uint8_t n, uint64_t x)
 int bre_write(bre_file_t *f, int64_t c, int64_t l)
 {
 	FILE *fp = (FILE*)f->fp;
-	if (!f->is_write) return -1;
+	if (f == 0 || !f->is_write) return -1;
 	if (f->c == c) {
 		f->l += l;
 	} else {
-		int64_t rest = f->l, max = (1LL<<f->hdr.b_per_run) - 1;
+		int64_t rest = f->l, max = (1LL<<f->hdr.b_per_run*8) - 1;
 		while (rest > 0) {
 			int64_t len = rest <= max? rest : max;
-			bre_write_int(fp, f->hdr.b_per_sym, f->c);
-			bre_write_int(fp, f->hdr.b_per_run, len);
+			bre_write_uint(fp, f->hdr.b_per_sym, f->c);
+			bre_write_uint(fp, f->hdr.b_per_run, len);
 			f->n_rec++;
 			rest -= len;
 		}
@@ -61,16 +61,33 @@ int bre_write(bre_file_t *f, int64_t c, int64_t l)
 	return 0;
 }
 
+bre_file_t *bre_open_write(const char *fn, const bre_hdr_t *hdr)
+{
+	FILE *fp;
+	bre_file_t *f;
+	fp = fn && strcmp(fn, "-")? fopen(fn, "wb") : stdout;
+	if (fp == 0) return 0; // fail to open the file
+	f = Calloc(bre_file_t, sizeof(*f));
+	f->c = -1, f->fp = fp, f->is_write = 1;
+	memcpy(&f->hdr, hdr, sizeof(*hdr));
+	if (bre_hdr_write(fp, &f->hdr) < 0) {
+		if (fp != stdout) fclose(fp);
+		free(f);
+		return 0;
+	}
+	return f;
+}
+
 /**********
  * Reader *
  **********/
 
 static int bre_hdr_read(FILE *fp, bre_hdr_t *hdr)
 {
-	size_t sz = 0;
+	size_t sz;
 	char magic[4];
-	sz += fread(magic, 1, 4, fp);
 	memset(hdr, 0, sizeof(*hdr));
+	sz = fread(magic, 1, 4, fp);
 	if (sz < 4 && strncmp(magic, "BRE\1", 4) != 0) // wrong magic
 		return -1;
 	sz += fread(&hdr->b_per_sym, 1, 1, fp);
@@ -88,7 +105,7 @@ static int bre_hdr_read(FILE *fp, bre_hdr_t *hdr)
 	return 0;
 }
 
-static inline int64_t bre_read_int(FILE *fp, uint8_t n) // NB: this doesn't handle signs properly except for 64-bit integers
+static inline int64_t bre_read_uint(FILE *fp, uint8_t n) // NB: read up to 63 bits
 {
 	uint8_t i, y, k, shift = 0;
 	uint64_t x = 0;
@@ -97,21 +114,24 @@ static inline int64_t bre_read_int(FILE *fp, uint8_t n) // NB: this doesn't hand
 		k += fread(&y, 1, 1, fp);
 		x |= (uint64_t)y << shift;
 	}
-	return (int64_t)x;
+	return k == n? x : -1;
 }
 
 int64_t bre_read(bre_file_t *f, int64_t *b)
 {
 	FILE *fp = (FILE*)f->fp;
 	int64_t ret = -1;
-	if (f->is_write) return -1;
+	if (f == 0 && f->is_write) return -1;
 	while (1) {
-		if (feof(fp) && (f->n_rec < 0 || f->n_rec < f->hdr.n_rec)) {
+		if (!feof(fp) && (f->hdr.n_rec < 0 || f->n_rec < f->hdr.n_rec)) {
 			int64_t c, l;
-			c = bre_read_int(fp, f->hdr.b_per_sym);
-			l = bre_read_int(fp, f->hdr.b_per_run);
+			c = bre_read_uint(fp, f->hdr.b_per_sym);
+			if (c < 0) goto end_read;
+			l = bre_read_uint(fp, f->hdr.b_per_run);
 			f->n_rec++;
-			if (c == f->c) {
+			if (f->c < 0) {
+				f->c = c, f->l = l;
+			} else if (c == f->c) {
 				f->l += l;
 			} else {
 				*b = f->c, ret = f->l;
@@ -119,7 +139,7 @@ int64_t bre_read(bre_file_t *f, int64_t *b)
 				break;
 			}
 		} else {
-			*b = f->c, ret = f->l;
+end_read:	*b = f->c, ret = f->l;
 			f->c = -1, f->l = 0;
 			break;
 		}
@@ -127,42 +147,41 @@ int64_t bre_read(bre_file_t *f, int64_t *b)
 	return ret;
 }
 
-/**************
- * Open/close *
- **************/
-
-bre_file_t *bre_open(const char *fn, int32_t is_write)
+bre_file_t *bre_open_read(const char *fn)
 {
 	FILE *fp;
-	int rc;
 	bre_file_t *f;
-	if (!is_write) {
-		fp = fn && strcmp(fn, "-")? fopen(fn, "rb") : stdout;
-	} else {
-		fp = fn && strcmp(fn, "-")? fopen(fn, "wb") : stdin;
-	}
+	fp = fn && strcmp(fn, "-")? fopen(fn, "rb") : stdin;
 	if (fp == 0) return 0; // fail to open the file
 	f = Calloc(bre_file_t, sizeof(*f));
-	f->c = -1;
-	f->is_write = is_write;
-	f->fp = fp;
-	if (!is_write) {
-		rc = bre_hdr_read(fp, &f->hdr);
-	} else {
-		rc = bre_hdr_write(fp, &f->hdr);
-	}
-	if (rc < 0) {
-		if (fp != stdin && fp != stdout) fclose(fp);
+	f->c = -1, f->fp = fp, f->is_write = 0;
+	if (bre_hdr_read(fp, &f->hdr) < 0) {
+		if (fp != stdin) fclose(fp);
 		free(f);
 		return 0;
 	}
 	return f;
 }
 
+/*****************
+ * Miscellaneous *
+ *****************/
+
 void bre_close(bre_file_t *f)
 {
 	if (f == 0) return;
 	if (f->is_write) bre_write(f, -1, 0);
-	free(f->hdr.aux);
+	if (f->hdr.l_aux > 0) free(f->hdr.aux);
+	fclose((FILE*)f->fp);
 	free(f);
+}
+
+int bre_hdr_init(bre_hdr_t *h, bre_atype_t at, int32_t b_per_run)
+{
+	memset(h, 0, sizeof(*h));
+	h->b_per_sym = 1, h->b_per_run = b_per_run, h->atype = at, h->n_rec = -1, h->asize = 256;
+	if (at == BRE_AT_ASCII) h->asize = 128;
+	else if (at == BRE_AT_DNA6) h->asize = 6;
+	else if (at == BRE_AT_DNA16) h->asize = 16;
+	return 0;
 }
