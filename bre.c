@@ -7,7 +7,7 @@
 #define Calloc(type, cnt)       ((type*)calloc((cnt), sizeof(type)))
 #define Realloc(type, ptr, cnt) ((type*)realloc((ptr), (cnt) * sizeof(type)))
 
-#define BRE_HDR_SIZE 34
+#define BRE_HDR_SIZE 24
 
 struct bre_file_s {
 	// these members are not modified by bre_read/bre_write()
@@ -30,10 +30,9 @@ static int bre_hdr_write(FILE *fp, const bre_hdr_t *hdr)
 	sz += fwrite("BRE\1", 1, 4, fp);
 	sz += fwrite(&hdr->b_per_sym, 1, 1, fp);
 	sz += fwrite(&hdr->b_per_run, 1, 1, fp);
-	sz += fwrite(&hdr->atype, 2, 1, fp) * 2;
+	sz += fwrite(&hdr->atype, 1, 1, fp);
+	sz += fwrite(&hdr->mtype, 1, 1, fp);
 	sz += fwrite(&hdr->asize, 8, 1, fp) * 8;
-	sz += fwrite(&hdr->mtype, 2, 1, fp) * 2;
-	sz += fwrite(&hdr->n_rec, 8, 1, fp) * 8;
 	sz += fwrite(&hdr->l_aux, 8, 1, fp) * 8;
 	if (sz != BRE_HDR_SIZE) return -1;
 	if (hdr->l_aux > 0) {
@@ -102,10 +101,9 @@ static int bre_hdr_read(FILE *fp, bre_hdr_t *hdr)
 		return -1;
 	sz += fread(&hdr->b_per_sym, 1, 1, fp);
 	sz += fread(&hdr->b_per_run, 1, 1, fp);
-	sz += fread(&hdr->atype, 2, 1, fp) * 2;
+	sz += fread(&hdr->atype, 1, 1, fp);
+	sz += fread(&hdr->mtype, 1, 1, fp);
 	sz += fread(&hdr->asize, 8, 1, fp) * 8;
-	sz += fread(&hdr->mtype, 2, 1, fp) * 2;
-	sz += fread(&hdr->n_rec, 8, 1, fp) * 8;
 	sz += fread(&hdr->l_aux, 8, 1, fp) * 8;
 	if (sz != BRE_HDR_SIZE) return -2;
 	if (hdr->l_aux > 0) {
@@ -132,11 +130,12 @@ int64_t bre_read(bre_file_t *f, int64_t *b)
 	int64_t ret = -1;
 	if (f == 0 && f->is_write) return -1;
 	while (1) {
-		if (!feof(f->fp) && (f->hdr.n_rec < 0 || f->n_rec < f->hdr.n_rec)) {
+		if (!feof(f->fp)) {
 			int64_t c, l;
 			c = bre_read_uint(f->fp, f->hdr.b_per_sym);
 			if (c < 0) goto end_read;
 			l = bre_read_uint(f->fp, f->hdr.b_per_run);
+			if (c == 0 && l == 0) goto end_read;
 			f->n_rec++;
 			if (f->c < 0) {
 				f->c = c, f->l = l;
@@ -179,7 +178,11 @@ bre_file_t *bre_open_read(const char *fn)
 void bre_close(bre_file_t *f)
 {
 	if (f == 0) return;
-	if (f->is_write) bre_write(f, -1, 0);
+	if (f->is_write) {
+		bre_write(f, -1, 0);
+		bre_write_uint(f->fp, f->hdr.b_per_sym, 0);
+		bre_write_uint(f->fp, f->hdr.b_per_run, 0);
+	}
 	if (f->hdr.l_aux > 0) free(f->hdr.aux);
 	fclose(f->fp);
 	free(f);
@@ -188,7 +191,7 @@ void bre_close(bre_file_t *f)
 int bre_hdr_init(bre_hdr_t *h, bre_atype_t at, int32_t b_per_run)
 {
 	memset(h, 0, sizeof(*h));
-	h->b_per_sym = 1, h->b_per_run = b_per_run, h->atype = at, h->n_rec = -1, h->asize = 256;
+	h->b_per_sym = 1, h->b_per_run = b_per_run, h->atype = at, h->asize = 256;
 	if (at == BRE_AT_ASCII) h->asize = 128;
 	else if (at == BRE_AT_DNA6) h->asize = 6;
 	else if (at == BRE_AT_DNA16) h->asize = 16;

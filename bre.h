@@ -10,10 +10,9 @@ extern "C" {
 typedef struct {
 	uint8_t b_per_sym; // bytes per symbol
 	uint8_t b_per_run; // bytes per run
-	uint16_t atype;    // alphabet type
+	uint8_t atype;     // alphabet type
+	uint8_t mtype;     // type of multi-string BWT
 	int64_t asize;     // alphabet size
-	uint16_t mtype;    // type of multi-string BWT
-	int64_t n_rec;     // number of records. A "record is a (symbol,length) pair in BRE file
 	int64_t l_aux;     // length of auxiliary data
 	uint8_t *aux;      // auxiliary data
 } bre_hdr_t;
