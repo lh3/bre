@@ -4,7 +4,7 @@
 
 int main(int argc, char *argv[])
 {
-	char *fn = "test.bre";
+	const char *fn = "test.bre";
 	bre_file_t *f;
 	bre_hdr_t hdr;
 	int64_t c, l;
@@ -19,7 +19,7 @@ int main(int argc, char *argv[])
 
 	// reading
 	f = bre_open_read(fn);
-	while ((l = bre_read(f, &c)) > 0)
+	while ((l = bre_read(f, &c)) > 0) // this will read two runs
 		printf("%ld:%ld\n", (long)c, (long)l);
 	bre_close(f);
 	return 0;
