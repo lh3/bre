@@ -16,7 +16,7 @@
 static int bre_hdr_write(FILE *fp, const bre_hdr_t *hdr)
 {
 	size_t sz = 0;
-	sz += fwrite("BRE\1", 4, fp);
+	sz += fwrite("BRE\1", 1, 4, fp);
 	sz += fwrite(&hdr->b_per_sym, 1, 1, fp);
 	sz += fwrite(&hdr->b_per_run, 1, 1, fp);
 	sz += fwrite(&hdr->atype, 2, 1, fp) * 2;
@@ -41,30 +41,24 @@ static inline void bre_write_int(FILE *fp, uint8_t n, uint64_t x)
 	}
 }
 
-static int bre_write_core(bre_file_t *f, bre_itr_t *itr, int64_t c, int64_t l)
-{
-	FILE *fp = (FILE*)f->fp;
-	if (itr->c == c) {
-		itr->l += l, itr->n += l;
-	} else {
-		int64_t rest = itr->l, max = (1LL<<f->b_per_run) - 1;
-		itr->r++;
-		while (rest > 0) {
-			int64_t len = rest <= max? rest : max;
-			bre_write_int(fp, f->b_per_sym, itr->c);
-			bre_write_int(fp, f->b_per_run, len);
-			itr->n_rec++;
-			rest -= len;
-		}
-		itr->c = c, itr->l = l;
-	}
-	return 0;
-}
-
 int bre_write(bre_file_t *f, int64_t c, int64_t l)
 {
-	assert(f->is_write);
-	return bre_write_core(f, &f->itr, c, l);
+	FILE *fp = (FILE*)f->fp;
+	if (!f->is_write) return -1;
+	if (f->c == c) {
+		f->l += l;
+	} else {
+		int64_t rest = f->l, max = (1LL<<f->hdr.b_per_run) - 1;
+		while (rest > 0) {
+			int64_t len = rest <= max? rest : max;
+			bre_write_int(fp, f->hdr.b_per_sym, f->c);
+			bre_write_int(fp, f->hdr.b_per_run, len);
+			f->n_rec++;
+			rest -= len;
+		}
+		f->c = c, f->l = l;
+	}
+	return 0;
 }
 
 /**********
@@ -106,36 +100,31 @@ static inline int64_t bre_read_int(FILE *fp, uint8_t n) // NB: this doesn't hand
 	return (int64_t)x;
 }
 
-static int64_t bre_read_core(bre_file_t *f, bre_itr_t *itr, int64_t *b)
+int64_t bre_read(bre_file_t *f, int64_t *b)
 {
 	FILE *fp = (FILE*)f->fp;
-	int64_t c, l, ret = -1;
+	int64_t ret = -1;
+	if (f->is_write) return -1;
 	while (1) {
-		if (feof(fp) && (f->n_rec < 0 || itr->n_rec < f->n_rec)) {
+		if (feof(fp) && (f->n_rec < 0 || f->n_rec < f->hdr.n_rec)) {
 			int64_t c, l;
-			c = bre_read_int(fp, f->b_per_sym);
-			l = bre_read_int(fp, f->b_per_run);
-			itr->n_rec++;
-			if (c == itr->c) {
-				itr->l += l;
+			c = bre_read_int(fp, f->hdr.b_per_sym);
+			l = bre_read_int(fp, f->hdr.b_per_run);
+			f->n_rec++;
+			if (c == f->c) {
+				f->l += l;
 			} else {
-				*b = itr->c, ret = itr->l;
-				itr->c = c, itr->l = l;
+				*b = f->c, ret = f->l;
+				f->c = c, f->l = l;
 				break;
 			}
 		} else {
-			*b = itr->c, ret = itr->l;
-			itr->c = -1, itr->l = 0;
+			*b = f->c, ret = f->l;
+			f->c = -1, f->l = 0;
 			break;
 		}
 	}
 	return ret;
-}
-
-int64_t bre_read(bre_file_t *f, int64_t *b)
-{
-	assert(!f->is_write);
-	return bre_read_core(f, &f->itr, b);
 }
 
 /**************
@@ -153,8 +142,8 @@ bre_file_t *bre_open(const char *fn, int32_t is_write)
 		fp = fn && strcmp(fn, "-")? fopen(fn, "wb") : stdin;
 	}
 	if (fp == 0) return 0; // fail to open the file
-	f = Calloc(bre_file_t, 1, sizeof(*f));
-	f->itr.c = -1;
+	f = Calloc(bre_file_t, sizeof(*f));
+	f->c = -1;
 	f->is_write = is_write;
 	f->fp = fp;
 	if (!is_write) {

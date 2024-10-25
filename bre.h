@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#ifndef __cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -19,16 +19,13 @@ typedef struct {
 } bre_hdr_t;
 
 typedef struct {
+	bre_hdr_t hdr;
+	int32_t is_write;
+	// modified during reading/writing
+	void *fp;
 	int64_t c;
 	int64_t l;
 	int64_t n_rec;
-} bre_itr_t;
-
-typedef struct {
-	bre_hdr_t hdr;
-	bre_itr_t itr;
-	void *fp;
-	int32_t is_write;
 } bre_file_t;
 
 bre_file_t *bre_open(const char *fn, int32_t is_write);
@@ -36,7 +33,7 @@ void bre_close(bre_file_t *f);
 int64_t bre_read(bre_file_t *f, int64_t *c);
 int bre_write(bre_file_t *f, int64_t c, int64_t l);
 
-#ifndef __cplusplus
+#ifdef __cplusplus
 }
 #endif
 
