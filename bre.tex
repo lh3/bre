@@ -51,6 +51,8 @@ All integers are represented in little endian.
   \multicolumn{2}{|l|}{\sf eof\_sym} & End-of-file symbol & {\tt uint8\_t[b\_per\_sym]} & 0 \\\cline{1-5}
   \multicolumn{2}{|l|}{\sf eof\_len} & End-of-file run length & {\tt uint8\_t[b\_per\_run]} & 0 \\\cline{1-5}
   \multicolumn{2}{|l|}{\sf n\_rec} & Number of records excluding the EOF run & {\tt int64\_t} & $[0,2^{63})$ \\\cline{1-5}
+  \multicolumn{2}{|l|}{\sf n\_sym} & Number of symbols & {\tt int64\_t} & $[0,2^{63})$ \\\cline{1-5}
+  \multicolumn{2}{|l|}{\sf n\_rec} & Number of runs & {\tt int64\_t} & $[0,2^{63})$ \\\cline{1-5}
 \end{tabular}}
 \end{table}
 

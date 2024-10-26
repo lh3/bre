@@ -4,7 +4,7 @@
 
 int main(int argc, char *argv[])
 {
-	const char *fn = "test.bre";
+	const char *fn = "test.bre"; // testing file name
 	bre_file_t *f;
 	bre_hdr_t hdr;
 	int64_t c, l;

@@ -3,6 +3,9 @@
 
 #include <stdint.h>
 
+#define BRE_ERR_TRUNCATE  (-1)
+#define BRE_ERR_INCONSIS  (-2)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -21,6 +24,8 @@ struct bre_file_s;
 typedef struct bre_file_s bre_file_t;
 
 typedef enum { BRE_AT_UNKNOWN=0, BRE_AT_ASCII, BRE_AT_DNA6, BRE_AT_DNA16 } bre_atype_t;
+
+extern int bre_verbose;
 
 /**
  * Open a BRE file for reading
@@ -92,6 +97,11 @@ int bre_write(bre_file_t *f, int64_t c, int64_t l);
  * @param f    file handler
  */
 void bre_close(bre_file_t *f);
+
+int bre_error(const bre_file_t *f);
+int64_t bre_n_rec(const bre_file_t *f);
+int64_t bre_n_sym(const bre_file_t *f);
+int64_t bre_n_run(const bre_file_t *f);
 
 #ifdef __cplusplus
 }

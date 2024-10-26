@@ -18,7 +18,13 @@ struct bre_file_s {
 	int64_t c;         // buffered symbol
 	int64_t l;         // buffered run length
 	int64_t n_rec;     // number of records read or written so far
+	int64_t n_sym;     // number of symbols
+	int64_t n_run;     // number of runs
+	int error;         // error code
+	int read_eof;
 };
+
+int bre_verbose = 1;
 
 /**********
  * Writer *
@@ -44,29 +50,43 @@ static int bre_hdr_write(FILE *fp, const bre_hdr_t *hdr)
 	sz += fwrite(&hdr->mtype, 1, 1, fp);
 	sz += bre_write_uint(fp, 8, hdr->asize); // NB: fwrite() depends on the CPU endianness and shouldn't be used here
 	sz += bre_write_uint(fp, 8, hdr->l_aux);
-	if (sz != BRE_HDR_SIZE) return -1;
+	if (sz != BRE_HDR_SIZE) {
+		if (bre_verbose >= 1) fprintf(stderr, "[%s] failed to write the header\n", __func__);
+		return -1;
+	}
 	if (hdr->l_aux > 0) {
 		assert(hdr->aux);
-		sz = fwrite(hdr->aux, 1, hdr->l_aux, fp); // TODO: test return code
+		sz = fwrite(hdr->aux, 1, hdr->l_aux, fp);
+		if (sz != hdr->l_aux) {
+			if (bre_verbose >= 1) fprintf(stderr, "[%s] failed to write the auxliary data\n", __func__);
+			return -2;
+		}
 	}
 	return 0;
 }
 
 int bre_write(bre_file_t *f, int64_t c, int64_t l)
 {
-	if (f == 0 || !f->is_write) return -1;
+	if (f == 0 || !f->is_write || f->error < 0) return -1;
 	if (f->c == c) {
 		f->l += l;
 	} else {
 		int64_t rest = f->l, max = (1LL<<f->hdr.b_per_run*8) - 1;
 		while (rest > 0) {
 			int64_t len = rest <= max? rest : max;
-			bre_write_uint(f->fp, f->hdr.b_per_sym, f->c);
-			bre_write_uint(f->fp, f->hdr.b_per_run, len);
-			f->n_rec++;
+			int k = 0;
+			k += bre_write_uint(f->fp, f->hdr.b_per_sym, f->c);
+			k += bre_write_uint(f->fp, f->hdr.b_per_run, len);
+			if (k != f->hdr.b_per_sym + f->hdr.b_per_run) {
+				if (bre_verbose >= 1) fprintf(stderr, "[%s] failed to write record %ld\n", __func__, (long)f->n_rec);
+				f->error = BRE_ERR_TRUNCATE;
+				break;
+			}
+			f->n_rec++, f->n_sym += len;
 			rest -= len;
 		}
 		f->c = c, f->l = l;
+		if (l > 0) f->n_run++;
 	}
 	return 0;
 }
@@ -76,7 +96,10 @@ bre_file_t *bre_open_write(const char *fn, const bre_hdr_t *hdr)
 	FILE *fp;
 	bre_file_t *f;
 	fp = fn && strcmp(fn, "-")? fopen(fn, "wb") : stdout;
-	if (fp == 0) return 0; // fail to open the file
+	if (fp == 0) { // fail to open the file
+		if (bre_verbose >= 1) fprintf(stderr, "[%s] failed to open file for writing\n", __func__);
+		return 0;
+	}
 	f = Calloc(bre_file_t, sizeof(*f));
 	f->c = -1, f->fp = fp, f->is_write = 1;
 	memcpy(&f->hdr, hdr, sizeof(*hdr));
@@ -86,6 +109,23 @@ bre_file_t *bre_open_write(const char *fn, const bre_hdr_t *hdr)
 		return 0;
 	}
 	return f;
+}
+
+static int bre_ftr_write(bre_file_t *f)
+{
+	size_t sz = 0;
+	bre_write(f, -1, 0);
+	sz += bre_write_uint(f->fp, f->hdr.b_per_sym, 0);
+	sz += bre_write_uint(f->fp, f->hdr.b_per_run, 0);
+	sz += bre_write_uint(f->fp, 8, f->n_rec);
+	sz += bre_write_uint(f->fp, 8, f->n_sym);
+	sz += bre_write_uint(f->fp, 8, f->n_run);
+	if (sz != f->hdr.b_per_sym + f->hdr.b_per_run + 24) {
+		if (bre_verbose >= 1) fprintf(stderr, "[%s] failed to write the footer\n", __func__);
+		f->error = BRE_ERR_TRUNCATE;
+		return -1;
+	}
+	return 0;
 }
 
 /**********
@@ -110,18 +150,42 @@ static int bre_hdr_read(FILE *fp, bre_hdr_t *hdr)
 	char magic[4];
 	memset(hdr, 0, sizeof(*hdr));
 	sz = fread(magic, 1, 4, fp);
-	if (sz < 4 && strncmp(magic, "BRE\1", 4) != 0) // wrong magic
+	if (sz < 4 || strncmp(magic, "BRE\1", 4) != 0) { // wrong magic
+		if (bre_verbose >= 1) fprintf(stderr, "[%s] wrong file magic\n", __func__);
 		return -1;
+	}
 	sz += fread(&hdr->b_per_sym, 1, 1, fp);
 	sz += fread(&hdr->b_per_run, 1, 1, fp);
 	sz += fread(&hdr->atype, 1, 1, fp);
 	sz += fread(&hdr->mtype, 1, 1, fp);
 	hdr->asize = bre_read_uint(fp, 8); sz += 8;
 	hdr->l_aux = bre_read_uint(fp, 8); sz += 8;
-	if (sz != BRE_HDR_SIZE) return -2;
+	if (sz != BRE_HDR_SIZE) {
+		if (bre_verbose >= 1) fprintf(stderr, "[%s] failed to read the header\n", __func__);
+		return -2;
+	}
 	if (hdr->l_aux > 0) {
 		hdr->aux = Calloc(uint8_t, hdr->l_aux);
-		sz = fread(hdr->aux, 1, hdr->l_aux, fp); // TODO: test return code
+		sz = fread(hdr->aux, 1, hdr->l_aux, fp);
+		if (sz != hdr->l_aux) {
+			if (bre_verbose >= 1) fprintf(stderr, "[%s] failed to read the auxliary data\n", __func__);
+			return -3;
+		}
+	}
+	return 0;
+}
+
+static int bre_ftr_check(bre_file_t *f)
+{
+	int64_t n_rec, n_sym, n_run;
+	n_rec = bre_read_uint(f->fp, 8);
+	n_sym = bre_read_uint(f->fp, 8);
+	n_run = bre_read_uint(f->fp, 8);
+	if (f->n_rec != n_rec || f->n_sym != n_sym || f->n_run != n_run) {
+		fprintf(stderr, "n_rec=%ld, n_sym=%ld, n_run=%ld\n", (long)f->n_rec, (long)f->n_sym, (long)f->n_run);
+		if (bre_verbose >= 1) fprintf(stderr, "[%s] inconsistent counts in the footer\n", __func__);
+		f->error = BRE_ERR_INCONSIS;
+		return -1;
 	}
 	return 0;
 }
@@ -129,25 +193,35 @@ static int bre_hdr_read(FILE *fp, bre_hdr_t *hdr)
 int64_t bre_read(bre_file_t *f, int64_t *b)
 {
 	int64_t ret = -1;
-	if (f == 0 && f->is_write) return -1;
+	if (f == 0 || f->is_write || f->error < 0 || f->read_eof) return -1;
 	while (1) {
 		if (!feof(f->fp)) {
 			int64_t c, l;
 			c = bre_read_uint(f->fp, f->hdr.b_per_sym);
-			if (c < 0) goto end_read; // failed to read due to EOF or error; TODO: have an error field in bre_file_t
 			l = bre_read_uint(f->fp, f->hdr.b_per_run);
-			if (c == 0 && l == 0) goto end_read;
-			f->n_rec++;
-			if (f->c < 0) {
+			if (c < 0 || l < 0) { // failed to read due to EOF or error
+				if (bre_verbose >= 1) fprintf(stderr, "[%s] failed to read record %ld\n", __func__, (long)f->n_rec);
+				f->error = BRE_ERR_TRUNCATE;
+				goto end_read;
+			}
+			if (c == 0 && l == 0) { // reaching the footer
+				f->n_run++;
+				f->read_eof = 1;
+				bre_ftr_check(f);
+				goto end_read;
+			}
+			f->n_rec++, f->n_sym += l;
+			if (f->c < 0) { // reading the first run
 				f->c = c, f->l = l;
 			} else if (c == f->c) {
 				f->l += l;
 			} else {
 				*b = f->c, ret = f->l;
 				f->c = c, f->l = l;
+				f->n_run++;
 				break;
 			}
-		} else {
+		} else { // the last run
 end_read:	*b = f->c, ret = f->l;
 			f->c = -1, f->l = 0;
 			break;
@@ -161,7 +235,10 @@ bre_file_t *bre_open_read(const char *fn)
 	FILE *fp;
 	bre_file_t *f;
 	fp = fn && strcmp(fn, "-")? fopen(fn, "rb") : stdin;
-	if (fp == 0) return 0; // fail to open the file
+	if (fp == 0) {
+		if (bre_verbose >= 1) fprintf(stderr, "[%s] failed to open file for reading\n", __func__);
+		return 0; // fail to open the file
+	}
 	f = Calloc(bre_file_t, sizeof(*f));
 	f->c = -1, f->fp = fp, f->is_write = 0;
 	if (bre_hdr_read(fp, &f->hdr) < 0) {
@@ -179,12 +256,7 @@ bre_file_t *bre_open_read(const char *fn)
 void bre_close(bre_file_t *f)
 {
 	if (f == 0) return;
-	if (f->is_write) {
-		bre_write(f, -1, 0);
-		bre_write_uint(f->fp, f->hdr.b_per_sym, 0);
-		bre_write_uint(f->fp, f->hdr.b_per_run, 0);
-		bre_write_uint(f->fp, 8, f->n_rec);
-	}
+	if (f->is_write) bre_ftr_write(f);
 	if (f->hdr.l_aux > 0) free(f->hdr.aux);
 	fclose(f->fp);
 	free(f);
@@ -199,3 +271,8 @@ int bre_hdr_init(bre_hdr_t *h, bre_atype_t at, int32_t b_per_run)
 	else if (at == BRE_AT_DNA16) h->asize = 16;
 	return 0;
 }
+
+int     bre_error(const bre_file_t *f) { return f->error; }
+int64_t bre_n_rec(const bre_file_t *f) { return f->n_rec; }
+int64_t bre_n_sym(const bre_file_t *f) { return f->n_sym; }
+int64_t bre_n_run(const bre_file_t *f) { return f->n_run; }
