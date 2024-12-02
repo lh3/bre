@@ -36,6 +36,9 @@ extern int bre_verbose;
  */
 bre_file_t *bre_open_read(const char *fn);
 
+// the first four magic bytes have been read
+bre_file_t *bre_open_no_magic(FILE *fp);
+
 /**
  * Read a run
  *
@@ -102,6 +105,7 @@ int bre_error(const bre_file_t *f);
 int64_t bre_n_rec(const bre_file_t *f);
 int64_t bre_n_sym(const bre_file_t *f);
 int64_t bre_n_run(const bre_file_t *f);
+const bre_hdr_t *bre_get_hdr(const bre_file_t *f);
 
 #ifdef __cplusplus
 }

@@ -144,16 +144,9 @@ static inline int64_t bre_read_uint(FILE *fp, uint8_t n) // NB: read up to 63 bi
 	return k == n? x : -1;
 }
 
-static int bre_hdr_read(FILE *fp, bre_hdr_t *hdr)
+static int bre_hdr_read_no_magic(FILE *fp, bre_hdr_t *hdr)
 {
-	size_t sz;
-	char magic[4];
-	memset(hdr, 0, sizeof(*hdr));
-	sz = fread(magic, 1, 4, fp);
-	if (sz < 4 || strncmp(magic, "BRE\1", 4) != 0) { // wrong magic
-		if (bre_verbose >= 1) fprintf(stderr, "[%s] wrong file magic\n", __func__);
-		return -1;
-	}
+	size_t sz = 4; // magic
 	sz += fread(&hdr->b_per_sym, 1, 1, fp);
 	sz += fread(&hdr->b_per_run, 1, 1, fp);
 	sz += fread(&hdr->atype, 1, 1, fp);
@@ -173,6 +166,19 @@ static int bre_hdr_read(FILE *fp, bre_hdr_t *hdr)
 		}
 	}
 	return 0;
+}
+
+static int bre_hdr_read(FILE *fp, bre_hdr_t *hdr)
+{
+	size_t sz;
+	char magic[4];
+	memset(hdr, 0, sizeof(*hdr));
+	sz = fread(magic, 1, 4, fp);
+	if (sz < 4 || strncmp(magic, "BRE\1", 4) != 0) { // wrong magic
+		if (bre_verbose >= 1) fprintf(stderr, "[%s] wrong file magic\n", __func__);
+		return -1;
+	}
+	return bre_hdr_read_no_magic(fp, hdr);
 }
 
 static int bre_ftr_check(bre_file_t *f)
@@ -230,6 +236,18 @@ end_read:	*b = f->c, ret = f->l;
 	return ret;
 }
 
+bre_file_t *bre_open_no_magic(FILE *fp)
+{
+	bre_file_t *f;
+	f = Calloc(bre_file_t, sizeof(*f));
+	f->c = -1, f->fp = fp, f->is_write = 0;
+	if (bre_hdr_read_no_magic(fp, &f->hdr) < 0) {
+		free(f);
+		return 0;
+	}
+	return f;
+}
+
 bre_file_t *bre_open_read(const char *fn)
 {
 	FILE *fp;
@@ -270,6 +288,11 @@ int bre_hdr_init(bre_hdr_t *h, bre_atype_t at, int32_t b_per_run)
 	else if (at == BRE_AT_DNA6) h->asize = 6;
 	else if (at == BRE_AT_DNA16) h->asize = 16;
 	return 0;
+}
+
+const bre_hdr_t *bre_get_hdr(const bre_file_t *f)
+{
+	return &f->hdr;
 }
 
 int     bre_error(const bre_file_t *f) { return f->error; }
