@@ -280,13 +280,13 @@ void bre_close(bre_file_t *f)
 	free(f);
 }
 
-int bre_hdr_init(bre_hdr_t *h, bre_atype_t at, int32_t b_per_run)
+int bre_hdr_init(bre_hdr_t *h, bre_atype_t at, int32_t b_per_sym, int32_t b_per_run)
 {
 	memset(h, 0, sizeof(*h));
-	h->b_per_sym = 1, h->b_per_run = b_per_run, h->atype = at, h->asize = 256;
-	if (at == BRE_AT_ASCII) h->asize = 128;
-	else if (at == BRE_AT_DNA6) h->asize = 6;
-	else if (at == BRE_AT_DNA16) h->asize = 16;
+	h->b_per_sym = b_per_sym, h->b_per_run = b_per_run, h->atype = at, h->asize = 256;
+	if (at == BRE_AT_ASCII) h->asize = 128, h->b_per_sym = 1;
+	else if (at == BRE_AT_DNA6) h->asize = 6, h->b_per_sym = 1;
+	else if (at == BRE_AT_DNA16) h->asize = 16, h->b_per_sym = 1;
 	return 0;
 }
 

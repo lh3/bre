@@ -58,11 +58,12 @@ int64_t bre_read(bre_file_t *f, int64_t *c);
  *
  * @param h          header to fill (out). bre_hdr_t::aux is discarded (be careful of memory leak!)
  * @param at         alphabet type (atype)
- * @param b_per_run  bytes per run
+ * @param b_per_sym  bytes per symbol (overriden by _at_)
+ * @param b_per_run  bytes per run (required)
  *
  * @return always 0 at the moment
  */
-int bre_hdr_init(bre_hdr_t *h, bre_atype_t at, int32_t b_per_run);
+int bre_hdr_init(bre_hdr_t *h, bre_atype_t at, int32_t b_per_sym, int32_t b_per_run);
 
 /**
  * Create a BRE file

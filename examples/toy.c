@@ -10,7 +10,7 @@ int main(int argc, char *argv[])
 	int64_t c, l;
 
 	// writing
-	bre_hdr_init(&hdr, BRE_AT_DNA6, 2);
+	bre_hdr_init(&hdr, BRE_AT_DNA6, 1, 2);
 	f = bre_open_write(fn, &hdr);
 	bre_write(f, 4, 10);
 	bre_write(f, 4, 100); // this will be combined with the previous run

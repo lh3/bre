@@ -2,7 +2,7 @@ CC=			gcc
 CFLAGS=		-g -Wall -Wc++-compat -std=c99 -O3
 CPPFLAGS=
 INCLUDES=
-PROG=		examples/toy examples/dna6print
+PROG=		examples/toy examples/dna6print examples/dna6import
 LIBS=
 
 ifneq ($(asan),)
@@ -19,6 +19,9 @@ endif
 all:$(PROG)
 
 examples/dna6print:examples/dna6print.c bre.c bre.h
+		$(CC) $(CFLAGS) -I. $< bre.c -o $@ $(LIBS)
+
+examples/dna6import:examples/dna6import.c bre.c bre.h
 		$(CC) $(CFLAGS) -I. $< bre.c -o $@ $(LIBS)
 
 examples/toy:examples/toy.c bre.c bre.h
