@@ -1,8 +1,8 @@
 CC=			gcc
-CFLAGS=		-g -Wall -Wc++-compat -O3
+CFLAGS=		-g -Wall -Wc++-compat -std=c99 -O3
 CPPFLAGS=
 INCLUDES=
-PROG=		example
+PROG=		examples/toy examples/dna6print
 LIBS=
 
 ifneq ($(asan),)
@@ -18,14 +18,17 @@ endif
 
 all:$(PROG)
 
-example:bre.o example.o
-		$(CC) $(CFLAGS) $^ -o $@ $(LIBS)
+examples/dna6print:examples/dna6print.c bre.c bre.h
+		$(CC) $(CFLAGS) -I. $< bre.c -o $@ $(LIBS)
+
+examples/toy:examples/toy.c bre.c bre.h
+		$(CC) $(CFLAGS) -I. $< bre.c -o $@ $(LIBS)
 
 bre.pdf:bre.tex
 		pdflatex $<
 
 clean:
-		rm -fr *.o a.out $(PROG) *~ *.a *.dSYM bre.pdf bre.log bre.aux test.bre
+		rm -fr *.o examples/*.o a.out $(PROG) *~ *.a examples/*.dSYM bre.pdf bre.log bre.aux test.bre
 
 depend:
 		(LC_ALL=C; export LC_ALL; makedepend -Y -- $(CFLAGS) $(CPPFLAGS) -- *.c)
@@ -33,4 +36,3 @@ depend:
 # DO NOT DELETE
 
 bre.o: bre.h
-example.o: bre.h
